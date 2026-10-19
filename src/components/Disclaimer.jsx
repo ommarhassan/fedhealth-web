@@ -1,10 +1,12 @@
 import { Info } from "lucide-react";
+import { useLang } from "../i18n/LanguageContext";
 
 export default function Disclaimer() {
+  const { t } = useLang();
   return (
     <div className="note">
       <Info size={16} />
-      <span>Research only. Illustrative demo data, not for clinical decision support.</span>
+      <span>{t("disclaimer")}</span>
     </div>
   );
 }

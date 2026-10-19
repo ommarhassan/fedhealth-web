@@ -1,20 +1,19 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowRight, Check, ChevronDown, Eye, EyeOff, Globe, Lock, Mail, SlidersHorizontal, Stethoscope } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, Check, Eye, EyeOff, Lock, Mail, SlidersHorizontal, Stethoscope } from "lucide-react";
 import Logo from "../components/Logo";
 import Disclaimer from "../components/Disclaimer";
+import LanguageSwitcher from "../components/LanguageSwitcher";
+import { useLang } from "../i18n/LanguageContext";
 import { login, register } from "../services/api";
 import { saveSession } from "../services/session";
 
-// اسم المستشفى في التصميم -> الكود اللي في الداتابيز (seed)
-const HOSPITALS = [
-  { label: "Hospital 1", code: "H1" },
-  { label: "Hospital 2", code: "H2" },
-  { label: "Hospital 3", code: "H3" }
-];
+// رقم المستشفى في التصميم -> الكود اللي في الداتابيز (seed)
+const HOSPITALS = [{ n: 1, code: "H1" }, { n: 2, code: "H2" }, { n: 3, code: "H3" }];
 
 export default function Auth() {
   const navigate = useNavigate();
+  const { t } = useLang();
   const [tab, setTab] = useState("login");
   const [role, setRole] = useState("doctor");
   const [hospital, setHospital] = useState("H1");
@@ -28,7 +27,6 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
 
   const isLogin = tab === "login";
-  const showHospital = role === "doctor"; // الأدمن مش مربوط بمستشفى
 
   function switchTab(next) {
     setTab(next);
@@ -37,30 +35,39 @@ export default function Auth() {
     if (next === "signup") setRole("doctor"); // التسجيل للدكاترة بس
   }
 
+  // رسايل الباك بالإنجليزي، فبنترجم حسب كود الحالة
+  function friendlyError(err) {
+    if (err.status === 0) return t("errNetwork");
+    if (err.status === 401) return t("errInvalid");
+    if (err.status === 403) return t("errPending");
+    if (err.status === 409) return t("errExists");
+    return err.i18n ? t(err.i18n) : t("errGeneric");
+  }
+  const fail = (key) => Object.assign(new Error(key), { i18n: key });
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setInfo("");
-    setLoading(true);
     try {
+      if (!email.trim() || !password || (!isLogin && !name.trim())) throw fail("errRequired");
+      if (!isLogin && password.length < 8) throw fail("errPasswordShort");
+
+      setLoading(true);
       if (isLogin) {
         const { token, user } = await login(email.trim(), password);
-        if (user.role !== role) {
-          throw new Error(`This account is not a ${role === "admin" ? "system administrator" : "doctor"} account.`);
-        }
-        if (role === "doctor" && user.hospital?.code !== hospital) {
-          throw new Error("This account belongs to a different hospital.");
-        }
+        if (user.role !== role) throw fail(role === "admin" ? "errRoleAdmin" : "errRoleDoctor");
+        if (role === "doctor" && user.hospital?.code !== hospital) throw fail("errHospital");
         saveSession(token, user, remember);
-        navigate("/dashboard");
+        navigate("/assessment");
       } else {
         await register({ name: name.trim(), email: email.trim(), password, hospitalCode: hospital });
-        setInfo("Request sent. An administrator needs to approve your account before you can sign in.");
+        setInfo(t("signupSent"));
         setPassword("");
         setTab("login");
       }
     } catch (err) {
-      setError(err.message);
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -70,39 +77,39 @@ export default function Auth() {
     <main className="screen auth">
       <header className="topbar">
         <span className="brand"><Logo size={26} /> FedHealth</span>
-        <span className="lang"><Globe size={15} /> EN <ChevronDown size={14} /></span>
+        <LanguageSwitcher />
       </header>
 
-      <h1 className="auth-title">Welcome</h1>
-      <p className="muted">Connect to your hospital’s research workspace.</p>
+      <h1 className="auth-title">{t("authWelcome")}</h1>
+      <p className="muted">{t("authSubtitle")}</p>
 
       <div className="tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={isLogin} className={isLogin ? "on" : ""} onClick={() => switchTab("login")}>Login</button>
-        <button type="button" role="tab" aria-selected={!isLogin} className={!isLogin ? "on" : ""} onClick={() => switchTab("signup")}>Sign Up</button>
+        <button type="button" role="tab" aria-selected={isLogin} className={isLogin ? "on" : ""} onClick={() => switchTab("login")}>{t("tabLogin")}</button>
+        <button type="button" role="tab" aria-selected={!isLogin} className={!isLogin ? "on" : ""} onClick={() => switchTab("signup")}>{t("tabSignup")}</button>
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
-        <span className="label">Your role</span>
+        <span className="label">{t("roleLabel")}</span>
         <div className="roles">
           <button type="button" className={`role ${role === "doctor" ? "on" : ""}`} onClick={() => setRole("doctor")} aria-pressed={role === "doctor"}>
             <Stethoscope size={18} />
-            <strong>Doctor / Medical Staff</strong>
+            <strong>{t("roleDoctor")}</strong>
             <i className="radio">{role === "doctor" && <Check size={12} />}</i>
           </button>
           <button type="button" className={`role ${role === "admin" ? "on" : ""}`} onClick={() => setRole("admin")} aria-pressed={role === "admin"} disabled={!isLogin}>
             <SlidersHorizontal size={18} />
-            <strong>System Administrator</strong>
+            <strong>{t("roleAdmin")}</strong>
             <i className="radio">{role === "admin" && <Check size={12} />}</i>
           </button>
         </div>
 
-        {showHospital && (
+        {role === "doctor" && ( // الأدمن مش مربوط بمستشفى
           <>
-            <span className="label">Select your hospital</span>
+            <span className="label">{t("hospitalLabel")}</span>
             <div className="hospitals">
               {HOSPITALS.map((h) => (
                 <button key={h.code} type="button" className={hospital === h.code ? "on" : ""} onClick={() => setHospital(h.code)} aria-pressed={hospital === h.code}>
-                  {h.label}
+                  {t("hospitalN", { n: h.n })}
                 </button>
               ))}
             </div>
@@ -111,37 +118,37 @@ export default function Auth() {
 
         {!isLogin && (
           <>
-            <label className="label" htmlFor="name">Full name</label>
+            <label className="label" htmlFor="name">{t("fieldName")}</label>
             <div className="field">
-              <input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Dr. Sarah Ahmed" autoComplete="name" required />
+              <input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("placeholderName")} autoComplete="name" />
             </div>
           </>
         )}
 
-        <label className="label" htmlFor="email">{isLogin ? "Email / Medical ID" : "Email"}</label>
+        <label className="label" htmlFor="email">{isLogin ? t("fieldEmailLogin") : t("fieldEmail")}</label>
         <div className="field">
           <Mail size={18} />
-          <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="dr.sarah@hospital1.org" autoComplete="email" required />
+          <input id="email" type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="dr.sarah@hospital1.org" autoComplete="email" />
         </div>
 
-        <label className="label" htmlFor="password">Password</label>
+        <label className="label" htmlFor="password">{t("fieldPassword")}</label>
         <div className="field">
           <Lock size={18} />
-          <input id="password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••••" autoComplete={isLogin ? "current-password" : "new-password"} required />
-          <button type="button" className="eye" onClick={() => setShowPassword((s) => !s)} aria-label={showPassword ? "Hide password" : "Show password"}>
+          <input id="password" type={showPassword ? "text" : "password"} dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••••••" autoComplete={isLogin ? "current-password" : "new-password"} />
+          <button type="button" className="eye" onClick={() => setShowPassword((s) => !s)} aria-label={showPassword ? t("hidePassword") : t("showPassword")}>
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
-        {!isLogin && <p className="hint">At least 8 characters.</p>}
+        {!isLogin && <p className="hint">{t("passwordHint")}</p>}
 
         {isLogin && (
           <div className="row">
             <label className="check">
               <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
               <span className="box"><Check size={12} /></span>
-              Remember Me
+              {t("remember")}
             </label>
-            <button type="button" className="link" onClick={() => setInfo("Ask your administrator to reset your password.")}>Forgot password?</button>
+            <Link to="/forgot-password" className="link">{t("forgot")}</Link>
           </div>
         )}
 
@@ -149,16 +156,12 @@ export default function Auth() {
         {info && <p className="msg ok" role="status">{info}</p>}
 
         <button type="submit" className="btn" disabled={loading}>
-          {loading ? "Please wait…" : isLogin ? "Sign In to Hospital Portal" : "Request Hospital Access"}
-          {!loading && <ArrowRight size={18} />}
+          {loading ? t("wait") : isLogin ? t("signIn") : t("requestAccess")}
+          {!loading && <ArrowRight size={18} className="flip" />}
         </button>
       </form>
 
-      <p className="meta">
-        {isLogin
-          ? "New to FedHealth? Select Sign Up to request hospital access from your administrator."
-          : "Your administrator reviews each request before access is granted."}
-      </p>
+      <p className="meta">{isLogin ? t("footerLogin") : t("footerSignup")}</p>
       <Disclaimer />
     </main>
   );
