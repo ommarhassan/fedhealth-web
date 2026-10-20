@@ -11,6 +11,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <LanguageProvider>
         <App />
       </LanguageProvider>
-    </BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
   </React.StrictMode>
 );
